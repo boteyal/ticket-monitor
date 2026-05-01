@@ -9,17 +9,12 @@ TELEGRAM_TOKEN   = "8513099859:AAF8Pz0eqlW-_kle5FGNaUgQCS3k60gBnjw"
 TELEGRAM_CHAT_ID = "8511626921"
 TARGET_URL       = "https://tickets.kupat.co.il/booking/features/937?display=list&prsntId=52351"
 
-# מילות מפתח ספציפיות – 13.6 ו-499 שקל
 KEYWORDS = [
-    "13.6",
-    "13/6",
-    "יוני",
-    "499",
-    "499.00",
-    "499 ₪",
+    "13.6", "13/6", "יוני", "499", "499.00", "499 ₪",
 ]
 
-CHECK_INTERVAL = 60  # שניות בין בדיקות
+CHECK_INTERVAL  = 60   # בדיקה כל דקה
+STATUS_INTERVAL = 60   # עדכון שעתי = 60 בדיקות
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
@@ -61,13 +56,17 @@ def check_keywords(content):
 
 def main():
     log.info("מוניטור מתחיל...")
-    send_telegram(
-        "🎟 <b>מוניטור כרטיסים התחיל!</b>\n"
-        "🔍 מחפש: <b>13.6.26 | 499 ₪</b>\n"
-        "⏱ בודק כל דקה"
-    )
 
-    last_hash = None
+    content = fetch_page()
+    if content:
+        sees_content = '499' in content or '13.6' in content
+        send_telegram(
+            f"🎟 <b>מוניטור כרטיסים התחיל!</b>\n"
+            f"🔍 מחפש: <b>13.6.26 | 499 ₪</b>\n"
+            f"⏱ בודק כל דקה | עדכון שעתי\n\n"
+            f"🔬 {'✅ הדף נקרא תקין' if sees_content else '⚠️ הדף דינמי – ייתכן שלא נראה הכל'}"
+        )
+
     check_num = 0
 
     while True:
@@ -80,12 +79,11 @@ def main():
             time.sleep(CHECK_INTERVAL)
             continue
 
-        current_hash = page_hash(content)
-
-        # בדיקת מילות מפתח
         found = check_keywords(content)
+
         if found:
-            log.info(f"נמצאו מילות מפתח: {found}")
+            # התראה מיידית!
+            log.info(f"🚨 נמצאו כרטיסים: {found}")
             send_telegram(
                 f"🚨 <b>נמצאו כרטיסים לתאריך 13.6!</b>\n"
                 f"💰 מחיר: 499 ₪\n"
@@ -93,18 +91,17 @@ def main():
                 f"🕐 {now}\n\n"
                 f"👉 <a href='{TARGET_URL}'>לחץ לרכישה עכשיו!</a>"
             )
+        elif check_num % STATUS_INTERVAL == 0:
+            # עדכון שעתי בלבד
+            log.info("עדכון שעתי – אין כרטיסים")
+            send_telegram(
+                f"✅ <b>עדכון שעתי</b>\n"
+                f"בדקתי {check_num} פעמים – אין עדיין כרטיסים ל-13.6 / 499₪\n"
+                f"🕐 {now} | ממשיך לעקוב... 👀"
+            )
         else:
-            if last_hash is not None and current_hash != last_hash:
-                log.info("הדף השתנה אבל לא נמצאו מילות מפתח")
-                send_telegram(
-                    f"⚠️ <b>הדף השתנה</b> – אבל לא נמצאו כרטיסים ל-13.6 / 499₪ עדיין.\n"
-                    f"🕐 {now}\n"
-                    f"👉 <a href='{TARGET_URL}'>בדוק בעצמך</a>"
-                )
-            else:
-                log.info("לא נמצאו שינויים רלוונטיים")
+            log.info("אין שינויים רלוונטיים")
 
-        last_hash = current_hash
         time.sleep(CHECK_INTERVAL)
 
 
