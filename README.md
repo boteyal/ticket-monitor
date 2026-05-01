@@ -1,0 +1,9 @@
+
+[phases.setup]
+nixPkgs = ["chromium", "chromedriver"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "python ticket_monitor.py"
