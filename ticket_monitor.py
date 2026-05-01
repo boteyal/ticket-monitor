@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-import requests
-import hashlib
 import time
 import logging
+import requests
 from datetime import datetime
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
 TELEGRAM_TOKEN   = "8513099859:AAF8Pz0eqlW-_kle5FGNaUgQCS3k60gBnjw"
 TELEGRAM_CHAT_ID = "8511626921"
 TARGET_URL       = "https://tickets.kupat.co.il/booking/features/937?display=list&prsntId=52351"
 
-KEYWORDS = [
-    "13.6", "13/6", "יוני", "499", "499.00", "499 ₪",
-]
+KEYWORDS = ["13.6", "13/6", "499", "499.00", "499 ₪"]
 
-CHECK_INTERVAL  = 60   # בדיקה כל דקה
-STATUS_INTERVAL = 60   # עדכון שעתי = 60 בדיקות
+CHECK_INTERVAL  = 60
+STATUS_INTERVAL = 60
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
@@ -34,19 +34,32 @@ def send_telegram(message):
         return False
 
 
-def fetch_page():
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+def get_driver():
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    driver = webdriver.Chrome(options=options)
+    return driver
+
+
+def fetch_page_content():
+    driver = None
     try:
-        r = requests.get(TARGET_URL, headers=headers, timeout=15)
-        r.raise_for_status()
-        return r.text
+        driver = get_driver()
+        driver.get(TARGET_URL)
+        time.sleep(5)  # המתן לטעינת JavaScript
+        content = driver.page_source
+        return content
     except Exception as e:
-        log.error(f"שגיאת טעינה: {e}")
+        log.error(f"שגיאת דפדפן: {e}")
         return None
-
-
-def page_hash(content):
-    return hashlib.md5(content.encode()).hexdigest()
+    finally:
+        if driver:
+            driver.quit()
 
 
 def check_keywords(content):
@@ -55,17 +68,14 @@ def check_keywords(content):
 
 
 def main():
-    log.info("מוניטור מתחיל...")
+    log.info("מוניטור מתחיל עם Selenium...")
 
-    content = fetch_page()
-    if content:
-        sees_content = '499' in content or '13.6' in content
-        send_telegram(
-            f"🎟 <b>מוניטור כרטיסים התחיל!</b>\n"
-            f"🔍 מחפש: <b>13.6.26 | 499 ₪</b>\n"
-            f"⏱ בודק כל דקה | עדכון שעתי\n\n"
-            f"🔬 {'✅ הדף נקרא תקין' if sees_content else '⚠️ הדף דינמי – ייתכן שלא נראה הכל'}"
-        )
+    send_telegram(
+        "🎟 <b>מוניטור כרטיסים התחיל! (גרסה מתקדמת)</b>\n"
+        "🔍 מחפש: <b>13.6.26 | 499 ₪</b>\n"
+        "⏱ בודק כל דקה | עדכון שעתי\n"
+        "🌐 משתמש בדפדפן אמיתי – רואה את כל התוכן"
+    )
 
     check_num = 0
 
@@ -74,15 +84,15 @@ def main():
         now = datetime.now().strftime("%H:%M:%S")
         log.info(f"בדיקה #{check_num}...")
 
-        content = fetch_page()
+        content = fetch_page_content()
         if content is None:
+            log.warning("לא הצלחתי לטעון, מנסה שוב")
             time.sleep(CHECK_INTERVAL)
             continue
 
         found = check_keywords(content)
 
         if found:
-            # התראה מיידית!
             log.info(f"🚨 נמצאו כרטיסים: {found}")
             send_telegram(
                 f"🚨 <b>נמצאו כרטיסים לתאריך 13.6!</b>\n"
@@ -92,8 +102,7 @@ def main():
                 f"👉 <a href='{TARGET_URL}'>לחץ לרכישה עכשיו!</a>"
             )
         elif check_num % STATUS_INTERVAL == 0:
-            # עדכון שעתי בלבד
-            log.info("עדכון שעתי – אין כרטיסים")
+            log.info("עדכון שעתי")
             send_telegram(
                 f"✅ <b>עדכון שעתי</b>\n"
                 f"בדקתי {check_num} פעמים – אין עדיין כרטיסים ל-13.6 / 499₪\n"
