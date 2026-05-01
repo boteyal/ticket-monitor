@@ -56,7 +56,7 @@ def check_page():
 
         page.on("response", handle_response)
 
-        # השינוי שעשינו: מחכים רק לטעינת המבנה המרכזי כדי למנוע קריסת Timeout
+        # מחכים רק לטעינת המבנה המרכזי כדי למנוע קריסת Timeout
         page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=30000)
         time.sleep(5)
 
@@ -120,7 +120,9 @@ def main():
 
         try:
             result = check_page()
-            tickets_found = result["date_found"] or result["price_found"]
+            
+            # השינוי: דורש שכל שלושת התנאים יתקיימו (תאריך + מחיר + זמינות)
+            tickets_found = result["date_found"] and result["price_found"] and result["available_found"]
 
             if tickets_found and not last_found:
                 log.info("🚨 נמצאו כרטיסים!")
