@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import time
+import random
 import logging
 import requests
 from datetime import datetime
@@ -89,7 +90,7 @@ def main():
     send_telegram(
         "🎟 <b>מוניטור כרטיסים – Playwright!</b>\n"
         "🔍 מחפש: <b>13.6.26 | 499 ₪</b>\n"
-        "⏱ בודק כל דקה | עדכון שעתי\n\n"
+        "⏱ בודק כל דקה פלוס זמן אקראי | עדכון שעתי\n\n"
         "⏳ בדיקת תקינות ראשונה..."
     )
 
@@ -146,7 +147,8 @@ def main():
         except Exception as e:
             log.error(f"שגיאה: {e}")
 
-        time.sleep(CHECK_INTERVAL)
+        # הוספת זמן אקראי בין 5 ל-25 שניות כדי למנוע חסימת בוטים
+        time.sleep(CHECK_INTERVAL + random.randint(5, 25))
 
 
 if __name__ == "__main__":
