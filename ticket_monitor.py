@@ -56,7 +56,8 @@ def check_page():
 
         page.on("response", handle_response)
 
-        page.goto(TARGET_URL, wait_until="networkidle", timeout=30000)
+        # השינוי שעשינו: מחכים רק לטעינת המבנה המרכזי כדי למנוע קריסת Timeout
+        page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=30000)
         time.sleep(5)
 
         content = page.content()
