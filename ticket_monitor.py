@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import time
 import random
 import logging
@@ -85,6 +86,9 @@ def check_page():
 
 
 def main():
+    log.info("הפעלת נשק יום הדין: מתקין דפדפן כרום מתוך הקוד עצמו...")
+    os.system("playwright install chromium")
+
     log.info("מוניטור Playwright מתחיל...")
 
     send_telegram(
@@ -148,7 +152,7 @@ def main():
         except Exception as e:
             log.error(f"שגיאה: {e}")
 
-        # הוספת זמן אקראי בין 5 ל-25 שניות כדי למנוע חסימת בוטים
+        # הוספת זמן אקראי בין 5 ל-25 שניות
         time.sleep(CHECK_INTERVAL + random.randint(5, 25))
 
 
