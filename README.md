@@ -1,10 +1,8 @@
-
 [phases.install]
 cmds = [
   "pip install -r requirements.txt",
-  "playwright install chromium",
   "playwright install-deps chromium"
 ]
 
 [start]
-cmd = "python ticket_monitor.py"
+cmd = "playwright install chromium && python ticket_monitor.py"
