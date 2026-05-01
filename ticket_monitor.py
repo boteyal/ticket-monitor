@@ -8,8 +8,18 @@ from datetime import datetime
 TELEGRAM_TOKEN   = "8513099859:AAF8Pz0eqlW-_kle5FGNaUgQCS3k60gBnjw"
 TELEGRAM_CHAT_ID = "8511626921"
 TARGET_URL       = "https://tickets.kupat.co.il/booking/features/937?display=list&prsntId=52351"
-KEYWORDS         = ["זמין", "כרטיסים", "available", "ticket", "פנוי", "הוסף לסל"]
-CHECK_INTERVAL   = 60  # שניות בין בדיקות
+
+# מילות מפתח ספציפיות – 13.6 ו-499 שקל
+KEYWORDS = [
+    "13.6",
+    "13/6",
+    "יוני",
+    "499",
+    "499.00",
+    "499 ₪",
+]
+
+CHECK_INTERVAL = 60  # שניות בין בדיקות
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
@@ -51,7 +61,11 @@ def check_keywords(content):
 
 def main():
     log.info("מוניטור מתחיל...")
-    send_telegram("🎟 <b>מוניטור כרטיסים התחיל!</b>\nאבדוק כל דקה ואתריע אם משהו משתנה.")
+    send_telegram(
+        "🎟 <b>מוניטור כרטיסים התחיל!</b>\n"
+        "🔍 מחפש: <b>13.6.26 | 499 ₪</b>\n"
+        "⏱ בודק כל דקה"
+    )
 
     last_hash = None
     check_num = 0
@@ -68,25 +82,27 @@ def main():
 
         current_hash = page_hash(content)
 
-        if last_hash is not None and current_hash != last_hash:
-            log.info("תוכן הדף השתנה!")
-            send_telegram(
-                f"⚠️ <b>תוכן הדף השתנה!</b>\n"
-                f"🕐 {now}\n\n"
-                f"👉 <a href='{TARGET_URL}'>לחץ לפתיחת הדף</a>"
-            )
-
+        # בדיקת מילות מפתח
         found = check_keywords(content)
         if found:
             log.info(f"נמצאו מילות מפתח: {found}")
             send_telegram(
-                f"🎉 <b>נמצאו כרטיסים!</b>\n"
-                f"🔍 מילות מפתח: {', '.join(found)}\n"
+                f"🚨 <b>נמצאו כרטיסים לתאריך 13.6!</b>\n"
+                f"💰 מחיר: 499 ₪\n"
+                f"🔍 נמצא: {', '.join(found)}\n"
                 f"🕐 {now}\n\n"
-                f"👉 <a href='{TARGET_URL}'>לחץ לפתיחת הדף</a>"
+                f"👉 <a href='{TARGET_URL}'>לחץ לרכישה עכשיו!</a>"
             )
         else:
-            log.info("לא נמצאו שינויים")
+            if last_hash is not None and current_hash != last_hash:
+                log.info("הדף השתנה אבל לא נמצאו מילות מפתח")
+                send_telegram(
+                    f"⚠️ <b>הדף השתנה</b> – אבל לא נמצאו כרטיסים ל-13.6 / 499₪ עדיין.\n"
+                    f"🕐 {now}\n"
+                    f"👉 <a href='{TARGET_URL}'>בדוק בעצמך</a>"
+                )
+            else:
+                log.info("לא נמצאו שינויים רלוונטיים")
 
         last_hash = current_hash
         time.sleep(CHECK_INTERVAL)
