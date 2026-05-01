@@ -1,1 +1,1 @@
-worker: python ticket_monitor.py
+worker: playwright install chromium && python ticket_monitor.py
