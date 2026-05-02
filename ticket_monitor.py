@@ -43,19 +43,20 @@ def check_page():
 
         def handle_response(response):
             try:
-                url = response.url
-                if any(x in url.lower() for x in ["api", "seat", "ticket", "present", "event", "price", "availab"]):
+                if any(x in response.url.lower() for x in ["api", "seat", "ticket", "present", "event", "price"]):
                     try:
-                        body = response.text()
-                        api_responses.append(body[:1000])
+                        api_responses.append(response.text()[:1000])
                     except:
                         pass
             except:
                 pass
 
         page.on("response", handle_response)
-        page.goto(TARGET_URL, wait_until="networkidle", timeout=30000)
-        time.sleep(5)
+
+        # טעינה עם domcontentloaded – מהיר יותר מ-networkidle
+        page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=60000)
+        # המתן לטעינת JavaScript
+        time.sleep(8)
 
         content = page.content()
         text = page.inner_text("body")
@@ -105,7 +106,7 @@ def main():
         check_num += 1
         now = datetime.now().strftime("%H:%M:%S")
         wait = CHECK_INTERVAL + random.randint(0, 30)
-        log.info(f"ממתין {wait} שניות לבדיקה #{check_num + 1}...")
+        log.info(f"ממתין {wait} שניות...")
         time.sleep(wait)
         log.info(f"בדיקה #{check_num}...")
 
