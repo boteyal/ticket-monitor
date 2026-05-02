@@ -10,8 +10,8 @@ TELEGRAM_TOKEN   = "8513099859:AAF8Pz0eqlW-_kle5FGNaUgQCS3k60gBnjw"
 TELEGRAM_CHAT_ID = "8511626921"
 TARGET_URL       = "https://tickets.kupat.co.il/booking/features/937?display=list&prsntId=52351"
 
-CHECK_INTERVAL  = 60   # בסיס שניות
-STATUS_INTERVAL = 60   # עדכון שעתי
+CHECK_INTERVAL  = 60
+STATUS_INTERVAL = 60
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
@@ -47,9 +47,9 @@ def check_page():
                 if any(x in url.lower() for x in ["api", "seat", "ticket", "present", "event", "price", "availab"]):
                     try:
                         body = response.text()
-                        api_responses.append({"url": url, "body": body[:1000]})
+                        api_responses.append(body[:1000])
                     except:
-                        api_responses.append({"url": url, "body": ""})
+                        pass
             except:
                 pass
 
@@ -61,18 +61,14 @@ def check_page():
         text = page.inner_text("body")
         browser.close()
 
-    all_text = text + content + " ".join(r["body"] for r in api_responses)
+    all_text = text + content + " ".join(api_responses)
 
-    # חייבים למצוא גם תאריך וגם מחיר – לא מספיק אחד מהם
     date_found  = any(v in all_text for v in ["13/6", "13.6", "13 ביוני", "יוני 13"])
     price_found = any(v in all_text for v in ["499", "499.00"])
     avail_found = any(v.lower() in text.lower() for v in ["זמין", "פנוי", "הוסף לסל", "רכוש", "available"])
 
-    # וגם – רק אם שניהם נמצאו!
-    relevant = date_found and price_found
-
     return {
-        "relevant":    relevant,
+        "relevant":    date_found and price_found,
         "date_found":  date_found,
         "price_found": price_found,
         "avail_found": avail_found,
@@ -108,23 +104,19 @@ def main():
     while True:
         check_num += 1
         now = datetime.now().strftime("%H:%M:%S")
-
-        # המתנה אקראית: 60 שניות + 0-30 שניות אקראיות
         wait = CHECK_INTERVAL + random.randint(0, 30)
-        log.info(f"בדיקה #{check_num} – ממתין {wait} שניות...")
+        log.info(f"ממתין {wait} שניות לבדיקה #{check_num + 1}...")
         time.sleep(wait)
-
-        log.info(f"בודק... ({now})")
+        log.info(f"בדיקה #{check_num}...")
 
         try:
             result = check_page()
 
-            # התראה רק אם גם תאריך וגם מחיר נמצאו
             if result["relevant"] and not last_found:
                 log.info("🚨 נמצאו כרטיסים!")
                 send_telegram(
                     f"🚨 <b>נמצאו כרטיסים לתאריך 13.6 במחיר 499₪!</b>\n"
-                    f"🟢 זמין לרכישה: {'✅ כן!' if result['avail_found'] else '⚠️ בדוק'}\n"
+                    f"🟢 זמין: {'✅ כן!' if result['avail_found'] else '⚠️ בדוק'}\n"
                     f"🕐 {now}\n\n"
                     f"👉 <a href='{TARGET_URL}'>לחץ לרכישה עכשיו!</a>"
                 )
@@ -141,7 +133,7 @@ def main():
                     f"🕐 {now} | ממשיך לעקוב... 👀"
                 )
             else:
-                log.info("אין שינויים רלוונטיים")
+                log.info("אין שינויים")
 
         except Exception as e:
             log.error(f"שגיאה: {e}")
