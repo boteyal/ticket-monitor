@@ -5,7 +5,7 @@ import logging
 import json
 import requests
 from datetime import datetime
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout, Error as PlaywrightError
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 TELEGRAM_TOKEN   = "8513099859:AAF8Pz0eqlW-_kle5FGNaUgQCS3k60gBnjw"
 TELEGRAM_CHAT_ID = "8511626921"
@@ -17,7 +17,7 @@ STATUS_EVERY_SEC = 3600
 MAX_ERRORS       = 5
 
 DATE_VARIANTS = ["13/6", "13.6", "13/06", "13 ביוני", "יוני 13",
-                 "june 13", "jun 13", "2026-06-13", "06-13", "6/13"]
+                 "june 13", "jun 13", "2026-06-13", "06-13"]
 PRICE_TARGET  = 499
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
@@ -38,37 +38,24 @@ def send_telegram(message):
         return False
 
 
-def search_json_recursive(obj, depth=0):
-    if depth > 10:
-        return False, False
-    date_found = price_found = False
-    if isinstance(obj, dict):
-        for val in obj.values():
-            d, p = search_json_recursive(val, depth + 1)
-            date_found  = date_found  or d
-            price_found = price_found or p
-    elif isinstance(obj, list):
-        for item in obj:
-            d, p = search_json_recursive(item, depth + 1)
-            date_found  = date_found  or d
-            price_found = price_found or p
-    elif isinstance(obj, str):
-        lower = obj.lower()
-        if any(v.lower() in lower for v in DATE_VARIANTS):
-            date_found = True
-        if str(PRICE_TARGET) in obj:
-            price_found = True
-    elif isinstance(obj, (int, float)):
-        if obj == PRICE_TARGET:
-            price_found = True
-    return date_found, price_found
+def text_has_date(text):
+    return any(v.lower() in text.lower() for v in DATE_VARIANTS)
+
+
+def text_has_price(text):
+    return str(PRICE_TARGET) in text
+
+
+def both_in_same_response(api_texts):
+    """בודק אם גם תאריך וגם מחיר נמצאים באותה תגובת API"""
+    for text in api_texts:
+        if text_has_date(text) and text_has_price(text):
+            return True, text[:300]
+    return False, None
 
 
 def check_page():
-    """כל בדיקה פותחת ומסגרת Playwright מחדש לגמרי"""
-    api_jsons = []
     api_texts = []
-
     playwright = None
     browser    = None
 
@@ -84,13 +71,11 @@ def check_page():
         def handle_response(response):
             try:
                 if any(x in response.url.lower() for x in
-                       ["api", "seat", "ticket", "present", "event", "price", "booking", "kupat"]):
+                       ["api", "seat", "ticket", "present", "event",
+                        "price", "booking", "kupat", "feature"]):
                     body = response.text()
-                    api_texts.append(body[:3000])
-                    try:
-                        api_jsons.append(json.loads(body))
-                    except:
-                        pass
+                    if body and len(body) > 10:
+                        api_texts.append(body[:5000])
             except:
                 pass
 
@@ -99,53 +84,27 @@ def check_page():
         try:
             page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=60000)
         except PlaywrightTimeout:
-            log.warning("Timeout בטעינה, ממשיך עם מה שנטען...")
+            log.warning("Timeout, ממשיך...")
 
         time.sleep(10)
-
-        page_text   = page.inner_text("body")
-        page_source = page.content()
+        page_text = page.inner_text("body")
 
     finally:
-        # סגירה בטוחה תמיד – גם בשגיאה
         try:
-            if browser:
-                browser.close()
-        except:
-            pass
+            if browser:    browser.close()
+        except: pass
         try:
-            if playwright:
-                playwright.stop()
-        except:
-            pass
+            if playwright: playwright.stop()
+        except: pass
 
-    # חיפוש ב-JSON
-    json_date = json_price = False
-    for j in api_jsons:
-        d, p = search_json_recursive(j)
-        json_date  = json_date  or d
-        json_price = json_price or p
-
-    # חיפוש בטקסט כגיבוי
-    all_text = page_text + page_source + " ".join(api_texts)
-    text_date  = any(v.lower() in all_text.lower() for v in DATE_VARIANTS)
-    text_price = str(PRICE_TARGET) in all_text
-
-    date_found  = json_date  or text_date
-    price_found = json_price or text_price
-    avail_found = any(v.lower() in page_text.lower()
-                      for v in ["זמין", "פנוי", "הוסף לסל", "רכוש", "available"])
+    # הבדיקה החשובה – גם תאריך וגם מחיר באותה תגובה
+    found_together, match_snippet = both_in_same_response(api_texts)
 
     return {
-        "relevant":    date_found and price_found,
-        "date_found":  date_found,
-        "price_found": price_found,
-        "avail_found": avail_found,
-        "json_date":   json_date,
-        "json_price":  json_price,
-        "api_count":   len(api_texts),
-        "json_count":  len(api_jsons),
-        "text_sample": page_text[:400],
+        "relevant":       found_together,
+        "match_snippet":  match_snippet,
+        "api_count":      len(api_texts),
+        "text_sample":    page_text[:300],
     }
 
 
@@ -153,25 +112,22 @@ def main():
     log.info("מוניטור מתחיל...")
     send_telegram(
         "🎟 <b>מוניטור כרטיסים התחיל!</b>\n"
-        "🔍 מחפש: <b>13.6.26 AND 499 ₪</b>\n"
+        "🔍 מחפש: <b>13.6 AND 499 – באותה תגובת API</b>\n"
         "⏱ בודק כל ~דקה | עדכון כל שעה\n\n"
-        "⏳ בדיקת תקינות ראשונה..."
+        "⏳ בדיקת תקינות..."
     )
 
     try:
         result = check_page()
         send_telegram(
             f"🔬 <b>בדיקת תקינות:</b>\n"
-            f"📅 תאריך 13/6: {'✅' if result['date_found'] else '❌'} "
-            f"({'JSON' if result['json_date'] else 'טקסט' if result['date_found'] else 'לא נמצא'})\n"
-            f"💰 מחיר 499: {'✅' if result['price_found'] else '❌'} "
-            f"({'JSON' if result['json_price'] else 'טקסט' if result['price_found'] else 'לא נמצא'})\n"
-            f"🟢 זמינות: {'✅' if result['avail_found'] else '❌'}\n"
-            f"🌐 API: {result['api_count']} תגובות ({result['json_count']} JSON)\n\n"
-            f"📄 <b>טקסט מהדף:</b>\n<code>{result['text_sample'][:300]}</code>"
+            f"🎯 13.6 + 499 באותה תגובה: {'✅' if result['relevant'] else '❌ (תקין – אין כרטיסים עדיין)'}\n"
+            f"🌐 תגובות API: {result['api_count']}\n\n"
+            f"📄 טקסט מהדף:\n<code>{result['text_sample'][:250]}</code>\n\n"
+            f"<i>הבוט פעיל 👀</i>"
         )
     except Exception as e:
-        send_telegram(f"⚠️ שגיאה בבדיקת תקינות: {e}")
+        send_telegram(f"⚠️ שגיאה: {e}")
 
     check_num        = 0
     last_found       = False
@@ -194,14 +150,13 @@ def main():
             if result["relevant"] and not last_found:
                 send_telegram(
                     f"🚨 <b>נמצאו כרטיסים לתאריך 13.6 במחיר 499₪!</b>\n"
-                    f"🟢 זמין: {'✅ כן!' if result['avail_found'] else '⚠️ בדוק'}\n"
                     f"🕐 {now}\n\n"
                     f"👉 <a href='{TARGET_URL}'>לחץ לרכישה עכשיו!</a>"
                 )
                 last_found = True
 
             elif not result["relevant"] and last_found:
-                send_telegram(f"ℹ️ הכרטיסים נעלמו\n🕐 {now}\nממשיך לעקוב... 👀")
+                send_telegram(f"ℹ️ הכרטיסים נעלמו\n🕐 {now}\nממשיך... 👀")
                 last_found = False
 
             elif time.time() - last_status_time >= STATUS_EVERY_SEC:
@@ -218,11 +173,7 @@ def main():
             error_streak += 1
             log.error(f"שגיאה #{error_streak}: {e}")
             if error_streak >= MAX_ERRORS:
-                send_telegram(
-                    f"⚠️ <b>{MAX_ERRORS} שגיאות רצופות!</b>\n"
-                    f"שגיאה: {str(e)[:200]}\n"
-                    f"ממשיך לנסות..."
-                )
+                send_telegram(f"⚠️ <b>{MAX_ERRORS} שגיאות רצופות!</b>\n{str(e)[:200]}")
                 error_streak = 0
 
 
