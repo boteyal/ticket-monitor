@@ -2,7 +2,6 @@
 import time
 import random
 import logging
-import json
 import requests
 from datetime import datetime
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
@@ -38,24 +37,17 @@ def send_telegram(message):
         return False
 
 
-def text_has_date(text):
-    return any(v.lower() in text.lower() for v in DATE_VARIANTS)
-
-
-def text_has_price(text):
-    return str(PRICE_TARGET) in text
-
-
 def both_in_same_response(api_texts):
-    """בודק אם גם תאריך וגם מחיר נמצאים באותה תגובת API"""
     for text in api_texts:
-        if text_has_date(text) and text_has_price(text):
-            return True, text[:300]
-    return False, None
+        has_date  = any(v.lower() in text.lower() for v in DATE_VARIANTS)
+        has_price = str(PRICE_TARGET) in text
+        if has_date and has_price:
+            return True
+    return False
 
 
 def check_page():
-    api_texts = []
+    api_texts  = []
     playwright = None
     browser    = None
 
@@ -84,10 +76,24 @@ def check_page():
         try:
             page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=60000)
         except PlaywrightTimeout:
-            log.warning("Timeout, ממשיך...")
+            log.warning("Timeout בטעינה, ממשיך...")
 
         time.sleep(10)
-        page_text = page.inner_text("body")
+
+        # שימוש ב-evaluate במקום inner_text – לא תוקף
+        try:
+            page_text = page.evaluate("document.body.innerText") or ""
+        except:
+            page_text = ""
+
+        try:
+            page_source = page.content() or ""
+        except:
+            page_source = ""
+
+        # הוסף גם טקסט הדף לרשימת התגובות לחיפוש
+        if page_text or page_source:
+            api_texts.append(page_text + page_source)
 
     finally:
         try:
@@ -97,14 +103,9 @@ def check_page():
             if playwright: playwright.stop()
         except: pass
 
-    # הבדיקה החשובה – גם תאריך וגם מחיר באותה תגובה
-    found_together, match_snippet = both_in_same_response(api_texts)
-
     return {
-        "relevant":       found_together,
-        "match_snippet":  match_snippet,
-        "api_count":      len(api_texts),
-        "text_sample":    page_text[:300],
+        "relevant":  both_in_same_response(api_texts),
+        "api_count": len(api_texts),
     }
 
 
@@ -112,7 +113,7 @@ def main():
     log.info("מוניטור מתחיל...")
     send_telegram(
         "🎟 <b>מוניטור כרטיסים התחיל!</b>\n"
-        "🔍 מחפש: <b>13.6 AND 499 – באותה תגובת API</b>\n"
+        "🔍 מחפש: <b>13.6 AND 499₪ – באותה תגובה</b>\n"
         "⏱ בודק כל ~דקה | עדכון כל שעה\n\n"
         "⏳ בדיקת תקינות..."
     )
@@ -121,13 +122,12 @@ def main():
         result = check_page()
         send_telegram(
             f"🔬 <b>בדיקת תקינות:</b>\n"
-            f"🎯 13.6 + 499 באותה תגובה: {'✅' if result['relevant'] else '❌ (תקין – אין כרטיסים עדיין)'}\n"
+            f"🎯 13.6 + 499 באותה תגובה: {'✅ נמצא!' if result['relevant'] else '❌ לא נמצא (תקין – אין כרטיסים)'}\n"
             f"🌐 תגובות API: {result['api_count']}\n\n"
-            f"📄 טקסט מהדף:\n<code>{result['text_sample'][:250]}</code>\n\n"
-            f"<i>הבוט פעיל 👀</i>"
+            f"<i>הבוט פעיל ומחכה לכרטיסים 👀</i>"
         )
     except Exception as e:
-        send_telegram(f"⚠️ שגיאה: {e}")
+        send_telegram(f"⚠️ שגיאה בתקינות: {e}")
 
     check_num        = 0
     last_found       = False
