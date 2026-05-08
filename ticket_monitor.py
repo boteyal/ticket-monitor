@@ -6,7 +6,7 @@ import requests
 from datetime import datetime
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
-TELEGRAM_TOKEN   = "8513099859:AAF8Pz0eqlW-_kle5FGNaUgQCS3k60gBnjw"
+TELEGRAM_TOKEN   = "8313054570:AAHXAjIlES6ZCB7IaClbDDPIzmHeITK9wvg"
 TELEGRAM_CHAT_ID = "8511626921"
 TARGET_URL       = "https://tickets.kupat.co.il/booking/features/937?display=list&prsntId=52351"
 
@@ -80,7 +80,6 @@ def check_page():
 
         time.sleep(10)
 
-        # שימוש ב-evaluate במקום inner_text – לא תוקף
         try:
             page_text = page.evaluate("document.body.innerText") or ""
         except:
@@ -91,7 +90,6 @@ def check_page():
         except:
             page_source = ""
 
-        # הוסף גם טקסט הדף לרשימת התגובות לחיפוש
         if page_text or page_source:
             api_texts.append(page_text + page_source)
 
@@ -113,7 +111,7 @@ def main():
     log.info("מוניטור מתחיל...")
     send_telegram(
         "🎟 <b>מוניטור כרטיסים התחיל!</b>\n"
-        "🔍 מחפש: <b>13.6 AND 499₪ – באותה תגובה</b>\n"
+        "🔍 מחפש: <b>13.6 AND 499₪</b>\n"
         "⏱ בודק כל ~דקה | עדכון כל שעה\n\n"
         "⏳ בדיקת תקינות..."
     )
@@ -122,7 +120,7 @@ def main():
         result = check_page()
         send_telegram(
             f"🔬 <b>בדיקת תקינות:</b>\n"
-            f"🎯 13.6 + 499 באותה תגובה: {'✅ נמצא!' if result['relevant'] else '❌ לא נמצא (תקין – אין כרטיסים)'}\n"
+            f"🎯 13.6 + 499 נמצאו יחד: {'✅' if result['relevant'] else '❌ (תקין – אין כרטיסים עדיין)'}\n"
             f"🌐 תגובות API: {result['api_count']}\n\n"
             f"<i>הבוט פעיל ומחכה לכרטיסים 👀</i>"
         )
